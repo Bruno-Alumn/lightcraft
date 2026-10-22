@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-22
+
+### Export Effect Presets leaves your originals alone
+- Export Effect Presets… (`mask.exportEffects`) now refuses a path that is a photo's original or its XMP sidecar, as
+  the other exports do, and writes the file atomically (issue #2564). It used to write the presets over whatever file
+  it was given, and a failed write (a full disk) could leave a cut-off file where an earlier export was.
+
 ## 2026-10-21
 
 ### Sharper resampling in HDR and panorama merges
