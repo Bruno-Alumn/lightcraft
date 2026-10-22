@@ -1,5 +1,16 @@
 # What's new in LightCraft
 
+## 2026-10-22
+
+### Reliability
+- Opening or checking a library no longer changes a file that a link in the library folder points to: a link at
+  `catalog.log` was cut back or appended to, and one at `catalog.lock` locked or, when dangling, created (issues
+  #2552, #2122). Links at `catalog.snap` and at the settings files such as `prefs.json` are no longer read either, so
+  a private file can't be copied into the library as a damaged settings file. A link, or anything else that isn't a
+  regular file, at a catalog file's name keeps the library from opening, with a message naming it, until it is
+  removed. At a settings file's name it is left alone and the defaults are used. At `catalog.lock` the library opens
+  without its lock, with the same warning as on a share that can't lock (the log names the file).
+
 ## 2026-10-21
 
 ### Sharper resampling in HDR and panorama merges
