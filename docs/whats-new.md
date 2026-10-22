@@ -1,5 +1,14 @@
 # What's new in LightCraft
 
+## 2026-10-22
+
+### The crash log moved to the settings folder
+- The desktop app keeps `lightcraft-panics.log` in its settings folder now, next to `logs/`, instead of the system
+  temp folder (issue #2572). On Linux and FreeBSD every user shares that folder, so someone else could create the
+  file first to read what LightCraft wrote there, or plant a link that made it write into another file. A `--memory`
+  session, `LIGHTCRAFT_NO_PREFS` and an empty `LIGHTCRAFT_CONFIG_DIR` keep no crash log; panics still go to standard
+  error.
+
 ## 2026-10-21
 
 ### Sharper resampling in HDR and panorama merges
