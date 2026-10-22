@@ -1,5 +1,14 @@
 # What's new in LightCraft
 
+## 2026-10-22
+
+### Reliability
+- A damaged or crafted lossy DNG, Epson ERF or Mamiya MEF can no longer make LightCraft set aside gigabytes of memory
+  (or crash it on the web) for a JPEG whose header claims a far larger picture than it holds (issue #2560). Each JPEG in
+  a lossy DNG may be no larger than the tile or strip it fills, and the embedded preview used to measure white balance
+  no larger than 16 megapixels, the most that measurement uses; both are checked from the JPEG header before anything is
+  decoded.
+
 ## 2026-10-21
 
 ### Sharper resampling in HDR and panorama merges
