@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-22
+
+### Reliability
+- A photo with a keyword nested thousands of levels deep (in its XMP, IPTC or sidecar metadata) no longer crashes
+  LightCraft, then and on every launch after it: a keyword keeps its top 64 levels, as keyword list files already
+  did. A library that already holds such a keyword has it cut when it opens, and what was cut is written to the log.
+
 ## 2026-10-21
 
 ### Sharper resampling in HDR and panorama merges
