@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-23
+
+### Opening a library says so
+- Choosing a library in File ▸ Open Recent Library, or in the Open Library dialog, now closes the menu and says
+  which library is opening until it is open (issue #2718). A large library used to open with the menu still on
+  screen and no sign of what was happening, so the app looked hung. An error opening it shows as a message.
+
 ## 2026-10-21
 
 ### Sharper resampling in HDR and panorama merges
