@@ -142,6 +142,8 @@ fn a_browsed_folder_lists_the_people_of_its_library_photos() {
     set_faces(&mut h, browsed, vec![face(0.1, Some("Bea")), face(0.5, None)]);
     let r = exec(&mut h, "view.people", json!({}));
     assert_eq!(r["people"], 1, "{r}");
+    let name = dir.file_name().unwrap().to_string_lossy().into_owned();
+    assert!(r["source"].as_str().is_some_and(|s| s.ends_with(&name)), "the folder's name, not \"Folder\": {r}");
     assert!(shows(&mut h, "person:Ann") && shows(&mut h, &format!("unnamed-face:{}:1", imported.0)));
     assert!(!shows(&mut h, "person:Bea") && !shows(&mut h, &format!("unnamed-face:{}:1", browsed.0)), "a browsed file is no one's");
     assert!(!shows(&mut h, "person:Cid") && !shows(&mut h, &format!("unnamed-face:{}:1", elsewhere.0)), "nor is a photo elsewhere");
