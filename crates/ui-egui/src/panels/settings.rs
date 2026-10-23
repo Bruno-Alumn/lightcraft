@@ -177,16 +177,18 @@ fn general_tab(app: &mut LightcraftApp, ui: &mut egui::Ui, t: &Tokens) {
 }
 
 /// The field naming a program Edit In starts (`widget`, holding the setting `value` picks). Only
-/// the user's own typing sets it: in an edit that synthetic input (the control channel, MCP) took
-/// part in, every change is taken back until the edit ends, since a client must not choose what
-/// runs (#2551).
+/// the user's own typing sets it, since a client must not choose what runs (#2551): what synthetic
+/// input (the control channel, MCP) changes is taken back, and so is a cut or paste for the rest of
+/// an edit it took part in (the field's menu does those a frame or two after the click, the host
+/// answering a paste with the clipboard's text). The user's typing in that edit stays.
 fn program_field(app: &mut LightcraftApp, ui: &mut egui::Ui, widget: &str, hint: &str, value: fn(&mut crate::state::AppSettings) -> &mut String) {
     let id = crate::text_field::id(widget);
     let client = app.synthetic_frame || ui.data(|d| d.get_temp::<bool>(id.with("client"))).unwrap_or(false);
     let before = value(&mut app.ui.settings).clone();
     let r = crate::text_field::TextField::singleline(widget, value(&mut app.ui.settings)).hint(hint).width(220.0).show(ui);
     ui.data_mut(|d| d.insert_temp(id.with("client"), client && r.editing));
-    if client && *value(&mut app.ui.settings) != before {
+    let clipboard = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Cut | egui::Event::Paste(_))));
+    if (app.synthetic_frame || client && clipboard) && *value(&mut app.ui.settings) != before {
         *value(&mut app.ui.settings) = before;
         // nor can the field's undo bring it back
         if let Some(mut state) = egui::text_edit::TextEditState::load(ui.ctx(), id) {

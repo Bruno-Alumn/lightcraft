@@ -1460,6 +1460,28 @@ fn only_the_user_types_the_editor_into_settings() {
     assert_eq!(value(&h, "field:externalEditor"), typed, "pasted from the clipboard by a client");
 }
 
+/// Issue #2551: in an edit of the Other editor field a client began (its click), what the user
+/// then types stays; a paste the host hands over in that edit is still taken back, since the
+/// client may have chosen it from the field's menu.
+#[test]
+fn the_user_types_the_editor_into_an_edit_a_client_began() {
+    let services = Services { png: None, ..Default::default() };
+    let app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
+    let mut h = Headless::new(app, [1200.0, 900.0], 1.0);
+    h.app.ui.settings.external_editor = "DxO PhotoLab".into();
+    exec(&mut h, "app.settings", json!({"tab": "general"}));
+    h.settle(SETTLE);
+    click(&mut h, "field:externalEditor");
+    h.settle(SETTLE);
+    h.events.push(egui::Event::Text(" 8".into()));
+    h.settle(SETTLE);
+    let typed = h.app.ui.settings.external_editor.clone();
+    assert!(typed != "DxO PhotoLab" && typed.contains('8'), "the user's typing was taken back: {typed:?}");
+    h.events.push(egui::Event::Paste("/bin/sh".into()));
+    h.settle(SETTLE);
+    assert_eq!(h.app.ui.settings.external_editor, typed, "a paste in an edit a client began");
+}
+
 #[test]
 fn second_window_shows_the_active_photo() {
     let mut h = detail("panel.edit");
