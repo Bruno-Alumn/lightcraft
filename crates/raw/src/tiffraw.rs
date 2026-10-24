@@ -2,7 +2,7 @@
 
 use crate::unpack::*;
 use crate::{MAX_SAMPLES, RawData, RawError, Result, ljpeg};
-use lightcraft_tiff::image::{Chunk, ImageInfo, chunk_bytes};
+use lightcraft_tiff::image::{Chunk, ImageInfo, Layout, chunk_bytes};
 use lightcraft_tiff::{ByteOrder, tags::compression as comp};
 use rayon::prelude::*;
 
@@ -180,10 +180,17 @@ fn decode_chunk(data: &[u8], info: &ImageInfo, c: &Chunk, order: ByteOrder, pack
         comp::LOSSY_JPEG => {
             // lossy DNG: each chunk is a baseline (DCT) JPEG of 8-bit samples, its frame no larger than the nominal
             // chunk rounded up to whole 16-pixel MCUs (a last strip may be coded at the full RowsPerStrip); these
-            // edge caps also bound its pixel count
-            let nominal_h = ch.max(info.chunk_size().1.min(info.height) as usize);
-            let max = (cw.div_ceil(16).saturating_mul(16), nominal_h.div_ceil(16).saturating_mul(16));
-            let (px, jw, jh, jc) = lossy_jpeg(src, cpp, max, usize::MAX)?;
+            // edge caps also bound its pixel count. An image's only strip may be coded at a RowsPerStrip taller than
+            // the image, which a parsed file clamps to the image height: its frame height is left open and its pixel
+            // count bounded instead, at a few times the strip's
+            let mcu = |v: usize| v.div_ceil(16).saturating_mul(16);
+            let (max_h, max_px) = match info.layout {
+                Layout::Strips { rows_per_strip } if rows_per_strip >= info.height => {
+                    (usize::from(u16::MAX), mcu(cw).saturating_mul(mcu(info.height as usize)).saturating_mul(ONLY_STRIP_SLACK))
+                }
+                _ => (mcu(ch.max(info.chunk_size().1.min(info.height) as usize)), usize::MAX),
+            };
+            let (px, jw, jh, jc) = lossy_jpeg(src, cpp, (mcu(cw), max_h), max_px)?;
             let mut v = vec![0u16; n];
             for y in 0..ch.min(jh) {
                 for x in 0..cw.min(jw) {
@@ -208,6 +215,10 @@ fn decode_chunk(data: &[u8], info: &ImageInfo, c: &Chunk, order: ByteOrder, pack
         other => Err(RawError::Unsupported(format!("TIFF compression {other}"))),
     }
 }
+
+/// How many times an image's only lossy strip, rounded up to whole MCUs, its JPEG frame may hold: room for a
+/// RowsPerStrip a few times the image height without opening a 65535-row frame on a wide image.
+const ONLY_STRIP_SLACK: usize = 4;
 
 /// A chunk's nominal size and the part of it inside the image (smaller for edge tiles).
 fn chunk_dims(info: &ImageInfo, c: &Chunk) -> (usize, usize, usize, usize) {
@@ -461,6 +472,39 @@ mod lossy_tests {
         let file = [a.as_slice(), tall.as_slice()].concat();
         let r = read_image(&file, &info(a.len(), tall.len()), ByteOrder::Little, Packing::Msb);
         assert!(matches!(r, Err(RawError::Limit(_))), "{:?}", r.map(|_| ()));
+    }
+
+    /// A 16×20 lossy image whose only strip is coded at a RowsPerStrip of 64, past the image's bottom edge, decodes,
+    /// both with RowsPerStrip as written and as a parsed file clamps it to the image height (review of #2560); a
+    /// frame far taller than the strip is still refused.
+    #[test]
+    fn lossy_only_strip_coded_past_the_image_height_decodes() {
+        let info = |rows_per_strip: u32, len: usize| ImageInfo {
+            width: 16,
+            height: 20,
+            bits_per_sample: vec![8, 8, 8],
+            samples_per_pixel: 3,
+            compression: comp::LOSSY_JPEG,
+            photometric: 34892,
+            planar: 1,
+            predictor: 1,
+            sample_format: 1,
+            new_subfile_type: 0,
+            layout: Layout::Strips { rows_per_strip },
+            offsets: vec![0],
+            byte_counts: vec![len as u64],
+        };
+        let strip = rgb_jpeg(16, 64, 40);
+        for rps in [64, 20] {
+            let RawData::U16(v) = read_image(&strip, &info(rps, strip.len()), ByteOrder::Little, Packing::Msb).unwrap() else {
+                panic!("integer samples")
+            };
+            assert_eq!(v.len(), 16 * 20 * 3, "RowsPerStrip {rps}");
+            assert!((v[(19 * 16 + 3) * 3] as i32 - 40).abs() <= 3, "RowsPerStrip {rps}: {}", v[(19 * 16 + 3) * 3]);
+            let tall = with_frame_size(strip.clone(), 16, 4096);
+            let r = read_image(&tall, &info(rps, tall.len()), ByteOrder::Little, Packing::Msb);
+            assert!(matches!(r, Err(RawError::Limit(_))), "RowsPerStrip {rps}: {:?}", r.map(|_| ()));
+        }
     }
 
     /// A frame past either edge cap or the pixel cap is refused before it is decoded, up to the 65535×65535 a JPEG
