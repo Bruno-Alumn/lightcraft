@@ -1501,6 +1501,19 @@ fn edit_in_starts_only_the_editor_set_in_settings() {
     h.settle(SETTLE);
 }
 
+/// Settings ▸ General scrolled to its foot, where External Editing is, so that its fields are in view and take clicks.
+fn show_external_editing(h: &mut Headless) {
+    exec(h, "app.settings", json!({"tab": "general"}));
+    h.settle(SETTLE);
+    let Some(window) = h.app.widgets.iter().find(|(w, _)| w == "dialog:window").map(|(_, r)| *r) else { panic!("no Settings window") };
+    h.request("ui.move", json!({"x": window.center().x, "y": window.center().y}), T);
+    for _ in 0..6 {
+        h.request("ui.scroll", json!({"dy": -400.0}), T);
+        h.step();
+    }
+    h.settle(SETTLE);
+}
+
 /// Issue #2551: what the control channel types or pastes into Settings ▸ External Editing's two
 /// fields is taken back, and it can't paste the system clipboard there (a client must not choose
 /// the program Edit In starts); what the user types there stays.
@@ -1510,8 +1523,7 @@ fn only_the_user_types_the_editor_into_settings() {
     let app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
     let mut h = Headless::new(app, [1200.0, 900.0], 1.0);
     h.app.ui.settings.external_editor = "DxO PhotoLab".into();
-    exec(&mut h, "app.settings", json!({"tab": "general"}));
-    h.settle(SETTLE);
+    show_external_editing(&mut h);
     let field = |h: &Headless, id: &str| h.app.widgets.iter().find(|(w, _)| w == id).map(|(_, r)| *r);
     let value = |h: &Headless, id: &str| {
         let s = &h.app.ui.settings;
@@ -1570,8 +1582,7 @@ fn the_user_types_the_editor_into_an_edit_a_client_began() {
     let app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), services);
     let mut h = Headless::new(app, [1200.0, 900.0], 1.0);
     h.app.ui.settings.external_editor = "DxO PhotoLab".into();
-    exec(&mut h, "app.settings", json!({"tab": "general"}));
-    h.settle(SETTLE);
+    show_external_editing(&mut h);
     click(&mut h, "field:externalEditor");
     h.settle(SETTLE);
     h.events.push(egui::Event::Text(" 8".into()));
