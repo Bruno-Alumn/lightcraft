@@ -75,8 +75,8 @@ impl FsStore {
 
 /// A new staging file at `tmp`: whatever is already there (a leftover from a crashed save, or a link) is removed first
 /// (a link itself, never what it points to), then the file is created exclusively, so a write never follows a link
-/// planted at that name into another file (issue #1502).
-fn create_staging(tmp: &std::path::Path) -> io::Result<std::fs::File> {
+/// planted at that name into another file (issue #1502). Also writes the lock's owner note.
+pub(crate) fn create_staging(tmp: &std::path::Path) -> io::Result<std::fs::File> {
     if std::fs::symlink_metadata(tmp).is_ok() {
         std::fs::remove_file(tmp)?;
     }
@@ -303,6 +303,30 @@ mod tests_staging {
         store.append("z.log", b"cd").unwrap();
         store.truncate("z.log", 2).unwrap();
         assert_eq!(store.read("z.log").unwrap().unwrap(), b"ab");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The journal's append and truncate (which recovery uses) refuse a non-regular file at the
+    /// name instead of following it, so a link planted at `catalog.log` never receives library
+    /// bytes (CWE-59, Audit row 107); the snapshot write already removes such a link (#1502).
+    #[test]
+    fn append_and_truncate_refuse_a_link_at_the_name() {
+        let dir = std::env::temp_dir().join(format!("lc-log-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let victim = dir.join("victim.txt");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(&victim, b"keep").unwrap();
+        std::os::unix::fs::symlink(&victim, dir.join("catalog.log")).unwrap();
+        let mut store = FsStore::open(&dir).unwrap();
+        assert!(store.append("catalog.log", b"appended").is_err());
+        assert!(store.truncate("catalog.log", 0).is_err());
+        assert_eq!(std::fs::read(&victim).unwrap(), b"keep");
+        assert!(std::fs::symlink_metadata(dir.join("catalog.log")).unwrap().file_type().is_symlink());
+        // A regular file keeps working.
+        std::fs::remove_file(dir.join("catalog.log")).unwrap();
+        std::fs::write(dir.join("catalog.log"), b"abc").unwrap();
+        store.truncate("catalog.log", 1).unwrap();
+        assert_eq!(std::fs::read(dir.join("catalog.log")).unwrap(), b"a");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
