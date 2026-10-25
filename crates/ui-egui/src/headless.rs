@@ -2503,6 +2503,45 @@ mod tests {
 
     /// Review of #1966: a `path` whose extension names no format exports JPEG here, so its
     /// `bitDepth` is checked against JPEG's, not let through to an 8-bit file.
+
+    #[test]
+    fn export_dialog_follows_presets_renamed_or_deleted_elsewhere() {
+        use crate::state::{Dialog, ExportPresetPending as Pending};
+        let mut h = demo([1200.0, 1100.0]);
+        let t = Duration::from_secs(10);
+        let ask = |h: &mut Headless, method: &str, params: serde_json::Value| {
+            let r = h.request(method, params, t);
+            assert_eq!(r["ok"], true, "{method}: {r}");
+            h.step();
+            h.step();
+        };
+        let click = |h: &mut Headless, id: &str| ask(h, "ui.clickWidget", json!({"id": id}));
+        let state = |h: &Headless| match &h.app.ui.dialog {
+            Some(Dialog::Export { preset, .. }) => (preset.loaded.clone(), preset.pending.clone()),
+            _ => panic!("the export dialog is open"),
+        };
+        let has = |h: &Headless, w: &str| h.app.widgets.iter().any(|(id, _)| id == w);
+        h.app.session.execute("export.savePreset", &json!({"name": "Web", "params": {"format": "jpeg", "quality": 70}})).unwrap();
+        h.app.session.execute("export.savePreset", &json!({"name": "Small PNG", "params": {"format": "png", "width": 64}})).unwrap();
+        h.request("engine.execute", json!({"command": "dialog.export", "params": {}}), t);
+        h.settle(SETTLE);
+        click(&mut h, "combo:exportPreset");
+        click(&mut h, "button:exportPreset-Web");
+        assert_eq!(state(&h).0, Some(("Web".into(), false)));
+        // a case-only rename elsewhere keeps it loaded, under the new spelling, with its menu
+        ask(&mut h, "engine.execute", json!({"command": "export.renamePreset", "params": {"name": "Web", "to": "WEB"}}));
+        assert_eq!(state(&h).0, Some(("WEB".into(), false)));
+        assert!(has(&h, "icon:exportPresetActions"));
+        // Replace asks about a preset that is still there: deleted elsewhere, the question goes
+        if let Some(Dialog::Export { preset_name, .. }) = &mut h.app.ui.dialog {
+            *preset_name = "Small PNG".into();
+        }
+        h.step();
+        click(&mut h, "button:exportSavePreset");
+        assert_eq!(state(&h).1, Some(Pending::Replace("Small PNG".into())));
+        ask(&mut h, "engine.execute", json!({"command": "export.deletePreset", "params": {"name": "Small PNG"}}));
+        assert_eq!(state(&h).1, None, "no stale Replace for a preset that is gone");
+    }
     #[test]
     fn export_checks_the_depth_of_the_format_a_bare_path_gets() {
         let mut h = demo([1200.0, 900.0]);

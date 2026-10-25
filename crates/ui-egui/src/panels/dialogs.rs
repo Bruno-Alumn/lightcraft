@@ -790,15 +790,27 @@ pub fn show(app: &mut LightcraftApp, ctx: &egui::Context) {
                     let n = app.session.selection.ids.len().max(1);
                     ui.label(egui::RichText::new(crate::i18n::tr_format!("{n} photo{}", if n == 1 { "" } else { "s" }, n = n)).color(t.text_dim));
                     // a user preset renamed or deleted elsewhere (MCP, the control channel) while the
-                    // dialog is open is no longer the one loaded: Update would bring it back
-                    if let Some((name, false)) = &preset.loaded
-                        && !app.session.export_presets.iter().any(|p| p.name == *name)
-                    {
-                        preset.loaded = None;
-                        preset.params = serde_json::Value::Null;
-                        if !matches!(preset.pending, Some(Pending::Replace(_))) {
-                            preset.pending = None;
+                    // dialog is open is no longer the one loaded: Update would bring it back. Names
+                    // compare as the engine does, ignoring case, so a case-only rename keeps it loaded
+                    // under its new spelling.
+                    let saved = |name: &str| app.session.export_presets.iter().find(|p| p.name.eq_ignore_ascii_case(name)).map(|p| p.name.clone());
+                    if let Some((name, false)) = &mut preset.loaded {
+                        match saved(name) {
+                            Some(now) => *name = now,
+                            None => {
+                                preset.loaded = None;
+                                preset.params = serde_json::Value::Null;
+                                if !matches!(preset.pending, Some(Pending::Replace(_))) {
+                                    preset.pending = None;
+                                }
+                            }
                         }
+                    }
+                    // Replace asks about a preset that is still there; gone, Save saves it anew
+                    if let Some(Pending::Replace(name)) = &preset.pending
+                        && saved(name).is_none()
+                    {
+                        preset.pending = None;
                     }
                     // Preset: load a built-in or saved set of options into the dialog. The one loaded
                     // stays named there, with a * once the options differ from it; a user preset has
