@@ -90,6 +90,9 @@
   file first to read what LightCraft wrote there, or plant a link that made it write into another file. A `--memory`
   session, `LIGHTCRAFT_NO_PREFS` and an empty `LIGHTCRAFT_CONFIG_DIR` keep no crash log; panics still go to standard
   error.
+- An empty or relative `HOME`, `APPDATA` or `XDG_CONFIG_HOME` no longer puts the settings folder (and the crash log
+  and logs in it) under the folder LightCraft was started from: it is ignored (`XDG_CONFIG_HOME` then gives way to
+  `HOME`), and with no usable one there is no settings folder: panics then go to standard error only.
 
 ### Reliability
 - Opening a library no longer writes through a link left at the lock's owner note (`catalog.lock.owner`): the link

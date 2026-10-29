@@ -8,7 +8,9 @@
 //!    `%APPDATA%`. If that folder can't be written (read-only medium, Program Files), a warning is logged
 //!    and the platform folder is used.
 //! 3. The platform convention: macOS `~/Library/Application Support/LightCraft`, Windows
-//!    `%APPDATA%\LightCraft`, Linux `$XDG_CONFIG_HOME/lightcraft` or `~/.config/lightcraft`.
+//!    `%APPDATA%\LightCraft`, Linux `$XDG_CONFIG_HOME/lightcraft` or `~/.config/lightcraft`. An empty or
+//!    relative `HOME`, `APPDATA` or `XDG_CONFIG_HOME` is ignored, so the folder is never under the launch
+//!    directory; with no usable one there is no settings folder.
 //!
 //! Hosts that have a file system (the desktop app, the CLI, the MCP server) share these defaults so a model
 //! installed from one is there for the others. Nothing here is applied automatically: a [`Session`] has no
@@ -48,6 +50,9 @@ pub fn config_dir() -> Option<PathBuf> {
 }
 
 /// `portable` is asked only without an override, so an isolated run never probes beside the executable.
+/// An empty or relative `HOME`, `APPDATA` or `XDG_CONFIG_HOME` is ignored (an unusable `XDG_CONFIG_HOME`
+/// gives way to `HOME`): it would put the settings folder, and the logs and crash log in it, under
+/// whatever directory LightCraft was started in (issue #2572).
 fn config_dir_with(platform: Platform, env: impl Fn(&str) -> Option<OsString>, portable: impl FnOnce() -> Option<PathBuf>) -> Option<PathBuf> {
     if let Some(dir) = env("LIGHTCRAFT_CONFIG_DIR") {
         return (!dir.is_empty()).then(|| PathBuf::from(dir));
@@ -55,12 +60,12 @@ fn config_dir_with(platform: Platform, env: impl Fn(&str) -> Option<OsString>, p
     if let Some(dir) = portable() {
         return Some(dir);
     }
+    // Only a rooted folder: an empty or relative one would be under the launch directory (#2572).
+    let folder = |name: &str| env(name).map(PathBuf::from).filter(|dir| dir.has_root());
     match platform {
-        Platform::Mac => env("HOME").map(|h| PathBuf::from(h).join("Library/Application Support/LightCraft")),
-        Platform::Windows => env("APPDATA").map(|a| PathBuf::from(a).join("LightCraft")),
-        Platform::Other => {
-            env("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| env("HOME").map(|h| PathBuf::from(h).join(".config"))).map(|c| c.join("lightcraft"))
-        }
+        Platform::Mac => folder("HOME").map(|h| h.join("Library/Application Support/LightCraft")),
+        Platform::Windows => folder("APPDATA").map(|a| a.join("LightCraft")),
+        Platform::Other => folder("XDG_CONFIG_HOME").or_else(|| folder("HOME").map(|h| h.join(".config"))).map(|c| c.join("lightcraft")),
     }
 }
 
@@ -250,6 +255,39 @@ mod config_tests {
         assert_eq!(resolve(Platform::Other, &[("HOME", "/user")]), Some(PathBuf::from("/user/.config/lightcraft")));
         for platform in [Platform::Mac, Platform::Windows, Platform::Other] {
             assert_eq!(resolve(platform, &[]), None);
+        }
+    }
+
+    /// #2572 review: an empty or relative `HOME`, `APPDATA` or `XDG_CONFIG_HOME` would put the settings
+    /// folder (and the crash log and logs in it) under the launch directory, where another user could
+    /// have planted the folder and a link. Such a value is ignored: an unusable `XDG_CONFIG_HOME` falls
+    /// back to `HOME`, and with neither usable there is no settings folder.
+    #[test]
+    fn config_ignores_empty_or_relative_platform_folders() {
+        for bad in ["", "relative", "./here", "../up"] {
+            assert_eq!(resolve(Platform::Mac, &[("HOME", bad)]), None, "HOME={bad:?}");
+            assert_eq!(resolve(Platform::Other, &[("HOME", bad)]), None, "HOME={bad:?}");
+            assert_eq!(resolve(Platform::Windows, &[("APPDATA", bad), ("HOME", "/user")]), None, "APPDATA={bad:?}");
+            assert_eq!(resolve(Platform::Other, &[("XDG_CONFIG_HOME", bad)]), None, "XDG_CONFIG_HOME={bad:?}");
+            assert_eq!(resolve(Platform::Other, &[("XDG_CONFIG_HOME", bad), ("HOME", bad)]), None, "both {bad:?}");
+            assert_eq!(
+                resolve(Platform::Other, &[("XDG_CONFIG_HOME", bad), ("HOME", "/user")]),
+                Some(PathBuf::from("/user/.config/lightcraft")),
+                "XDG_CONFIG_HOME={bad:?} falls back to HOME"
+            );
+            assert_eq!(
+                resolve(Platform::Other, &[("XDG_CONFIG_HOME", "/xdg"), ("HOME", bad)]),
+                Some(PathBuf::from("/xdg/lightcraft")),
+                "a usable XDG_CONFIG_HOME doesn't need HOME"
+            );
+        }
+    }
+
+    /// The explicit profile keeps its own policy: a relative `LIGHTCRAFT_CONFIG_DIR` is the user's choice.
+    #[test]
+    fn config_override_may_still_be_relative() {
+        for platform in [Platform::Mac, Platform::Windows, Platform::Other] {
+            assert_eq!(resolve(platform, &[("LIGHTCRAFT_CONFIG_DIR", "isolated"), ("HOME", "")]), Some(PathBuf::from("isolated")));
         }
     }
 
