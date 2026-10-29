@@ -45,3 +45,39 @@ fn mouse_back_and_forward_buttons_step_through_the_photos() {
     press(&mut h, egui::PointerButton::Extra2);
     assert_eq!(h.app.session.active(), Some(first));
 }
+
+/// The develop settings of photo `id`.
+fn develop(h: &Headless, id: lightcraft_catalog::PhotoId) -> lightcraft_develop::DevelopSettings {
+    (*h.app.session.develop_of(id).unwrap_or_default()).clone()
+}
+
+/// Forward pressed over an Edit slider shows the next photo and moves no slider. egui never sees
+/// the button: the slider can't take a press that wobbles a little before the release as a drag
+/// to the pointer, on the photo navigation switches to (issue #3303).
+#[test]
+fn forward_over_a_slider_changes_no_develop_setting() {
+    let app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), Services { png: None, ..Default::default() });
+    let mut h = Headless::new(app, [1400.0, 1000.0], 1.0);
+    let ids = h.app.session.visible_cloned();
+    let (first, second) = (ids[2], ids[3]);
+    let r = h.request("engine.execute", json!({"command": "library.select", "params": {"ids": [first.0], "active": first.0}}), T);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.set", json!({"view": "detail", "right": "edit"}), T);
+    assert_eq!(r["ok"], true, "{r}");
+    h.settle(SETTLE);
+    let track = h.app.widgets.iter().rev().find(|(w, _)| w == "slider:light.exposure").map(|(_, r)| *r).expect("the Exposure slider is on screen");
+    // well right of the slider's middle (0 EV): a drag the slider took would set about +3 EV
+    let at = egui::pos2(track.left() + track.width() * 0.8, track.center().y);
+    let (before_first, before_second) = (develop(&h, first), develop(&h, second));
+    for (button, shown) in [(egui::PointerButton::Extra2, second), (egui::PointerButton::Extra1, first)] {
+        let moved = at + egui::vec2(12.0, 0.0);
+        h.app.synthetic.push(egui::Event::PointerMoved(at));
+        h.app.synthetic.push(egui::Event::PointerButton { pos: at, button, pressed: true, modifiers: Default::default() });
+        h.app.synthetic.push(egui::Event::PointerMoved(moved));
+        h.app.synthetic.push(egui::Event::PointerButton { pos: moved, button, pressed: false, modifiers: Default::default() });
+        h.settle(SETTLE);
+        assert_eq!(h.app.session.active(), Some(shown), "{button:?} shows the photo next to it");
+        assert_eq!(develop(&h, first), before_first, "{button:?}: the first photo keeps its settings");
+        assert_eq!(develop(&h, second), before_second, "{button:?}: the second photo keeps its settings");
+    }
+}
