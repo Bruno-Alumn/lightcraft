@@ -405,6 +405,25 @@ fn select_by_offers_exact_ratings() {
     assert_eq!(app.session.selection.ids, want);
 }
 
+/// #3311: the exact-rating rows are translated like "and higher" ones, not left in English.
+#[test]
+fn select_by_exact_rating_rows_are_translated() {
+    fn label_of(nodes: &[MenuNode], want: &serde_json::Value) -> Option<String> {
+        nodes.iter().find_map(|n| match n {
+            MenuNode::Item { id, params, label, .. } if id == "library.selectBy" && params == want => Some(label.clone()),
+            MenuNode::Submenu { children, .. } => label_of(children, want),
+            _ => None,
+        })
+    }
+    let app = app();
+    crate::i18n::set_language(crate::i18n::Locale::De);
+    let bar = menu_bar(&app);
+    crate::i18n::set_language(crate::i18n::Locale::En);
+    let edit = &bar.iter().find(|(t, _)| t == "Edit").unwrap().1;
+    assert_eq!(label_of(edit, &json!({"rating": 3, "ratingOp": "eq"})).as_deref(), Some("nur ★★★"));
+    assert_eq!(label_of(edit, &json!({"rating": 3})).as_deref(), Some("★★★ und höher"));
+}
+
 #[test]
 fn help_opens_the_docs_and_merge_last_needs_photos() {
     let mut app = app();
