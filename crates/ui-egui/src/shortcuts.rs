@@ -446,6 +446,12 @@ fn pressed_commands(app: &LightcraftApp, ctx: &egui::Context) -> (Vec<String>, V
             }
         }
         fixed_photo_keys(i, &native, &taken, grid_navigation, &mut fire);
+        // the mouse's Back / Forward buttons: the previous / next photo, as ← / → (issue #3303)
+        for (button, id) in [(egui::PointerButton::Extra1, "library.previous"), (egui::PointerButton::Extra2, "library.next")] {
+            if i.pointer.button_pressed(button) {
+                fire.push(id.to_string());
+            }
+        }
     });
     (fire, aliased)
 }
