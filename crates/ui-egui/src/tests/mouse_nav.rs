@@ -46,6 +46,46 @@ fn mouse_back_and_forward_buttons_step_through_the_photos() {
     assert_eq!(h.app.session.active(), Some(first));
 }
 
+/// Each press steps once, in the order pressed, also when several arrive in one frame's input
+/// (a fast double press, or a frame that took long): two Forward presses show the photo two
+/// on, and on the last photo Forward (which stays there) then Back shows the one before it
+/// (issue #3303).
+#[test]
+fn presses_in_one_frame_step_once_each_in_order() {
+    let app = LightcraftApp::new(lightcraft_engine::Session::with_demo(), Services { png: None, ..Default::default() });
+    let mut h = Headless::new(app, [1200.0, 800.0], 1.0);
+    let ids = h.app.session.visible_cloned();
+    let (first, third) = (ids[2], ids[4]);
+    let r = h.request("engine.execute", json!({"command": "library.select", "params": {"ids": [first.0], "active": first.0}}), T);
+    assert_eq!(r["ok"], true, "{r}");
+    let r = h.request("ui.set", json!({"view": "detail"}), T);
+    assert_eq!(r["ok"], true, "{r}");
+    h.settle(SETTLE);
+    let pos = h.app.canvas_rect.map_or(egui::pos2(600.0, 400.0), |r| r.center());
+    // the host's input for one frame, as a real host hands it over (`synthetic` would spread the
+    // presses over several frames)
+    let one_frame = |h: &mut Headless, buttons: &[egui::PointerButton]| {
+        h.events.push(egui::Event::PointerMoved(pos));
+        for button in buttons {
+            for pressed in [true, false] {
+                h.events.push(egui::Event::PointerButton { pos, button: *button, pressed, modifiers: Default::default() });
+            }
+        }
+        h.step();
+        h.settle(SETTLE);
+    };
+    one_frame(&mut h, &[egui::PointerButton::Extra2, egui::PointerButton::Extra2]);
+    assert_eq!(h.app.session.active(), Some(third), "two Forward presses show the photo two on");
+    let (last, before_last) = (ids[ids.len() - 1], ids[ids.len() - 2]);
+    let r = h.request("engine.execute", json!({"command": "library.select", "params": {"ids": [last.0], "active": last.0}}), T);
+    assert_eq!(r["ok"], true, "{r}");
+    h.settle(SETTLE);
+    one_frame(&mut h, &[egui::PointerButton::Extra2]);
+    assert_eq!(h.app.session.active(), Some(last), "Forward on the last photo stays there");
+    one_frame(&mut h, &[egui::PointerButton::Extra2, egui::PointerButton::Extra1]);
+    assert_eq!(h.app.session.active(), Some(before_last), "Forward, then Back");
+}
+
 /// The develop settings of photo `id`.
 fn develop(h: &Headless, id: lightcraft_catalog::PhotoId) -> lightcraft_develop::DevelopSettings {
     (*h.app.session.develop_of(id).unwrap_or_default()).clone()
