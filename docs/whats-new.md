@@ -1,5 +1,13 @@
 # What's new in LightCraft
 
+## 2026-10-30
+
+### A CR2 opens in the aspect ratio set in the camera
+- A Canon CR2 shot at an in-camera aspect ratio, such as 3:2 on a PowerShot with a 4:3 sensor, now opens in that
+  shape, as a CR3 already did. The raw always holds the whole sensor image; the camera records the rectangle you
+  framed in its maker note, and LightCraft now uses it as the photo's default crop. Photos shot at the sensor's own
+  shape are unchanged, and thumbnails are rendered again once.
+
 ## 2026-10-24
 
 ### Relative-date filters and smart albums follow the clock
