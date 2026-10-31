@@ -4,7 +4,8 @@
 //! once (lines split at `\n`, kerning within a face) and reports its size, so callers can anchor
 //! it before drawing; drawing hands out per-pixel coverage, and the caller blends.
 //!
-//! Horizontal text has no contextual shaping or bidi reordering; Thai combining marks use
+//! Text is laid out composed (NFC), so decomposed input (macOS file names) draws as it would
+//! composed. Horizontal text has no contextual shaping or bidi reordering; Thai combining marks use
 //! per-character metrics rather than shaped positioning. Arabic faces are not offered. Characters
 //! no face covers draw as Inter's missing-glyph box.
 
@@ -79,6 +80,11 @@ impl TextLayout {
             Some((i, _)) => text.get(..i).unwrap_or(text),
             None => text,
         };
+        // composed (NFC): file names from macOS are often decomposed (NFD), and laid out one
+        // scalar at a time a Hangul syllable's jamo or a letter's combining marks would each take
+        // a cell of their own (#3480)
+        let composed = icu_normalizer::ComposingNormalizerBorrowed::new_nfc().normalize(text);
+        let text = composed.as_ref();
         let fonts = faces(craft);
         let latin = fonts.first()?.clone();
         let vertical_data: Vec<_> = if vertical {
@@ -248,6 +254,22 @@ mod tests {
         let mut covered = 0;
         layout.draw(0.0, 0.0, |_, _, coverage| covered += usize::from(coverage > 0.0));
         assert!(covered > 0, "{script} outlines are rasterized");
+    }
+
+    /// Decomposed text (NFD, as macOS file names often are) is laid out composed: a Hangul
+    /// syllable's jamo and a letter's combining marks don't each take a cell of their own (#3480).
+    #[test]
+    fn decomposed_text_lays_out_as_composed() {
+        for composed in ["제주도 바다 여행", "HỌC ĐỂ ỨNG DỤNG", "Café Zürich"] {
+            let nfd: String = icu_normalizer::DecomposingNormalizerBorrowed::new_nfd().normalize(composed).into_owned();
+            assert!(nfd.chars().count() > composed.chars().count(), "{composed} decomposes");
+            let a = TextLayout::new(composed, 40.0, false, CRAFT_FONTS).unwrap();
+            let b = TextLayout::new(&nfd, 40.0, false, CRAFT_FONTS).unwrap();
+            assert_eq!(b.glyphs.len(), composed.chars().count(), "{composed}: one glyph per composed character");
+            assert_eq!((b.width, b.height), (a.width, a.height), "{composed}");
+            let ids = |l: &TextLayout| l.glyphs.iter().map(|(f, g, _)| (*f, g.id.0)).collect::<Vec<_>>();
+            assert_eq!(ids(&b), ids(&a), "{composed}: the same glyphs");
+        }
     }
 
     #[test]

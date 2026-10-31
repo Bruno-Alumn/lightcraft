@@ -1,5 +1,12 @@
 # What's new in LightCraft
 
+## 2026-10-31
+
+### Korean and accented file names in exported text
+- Text LightCraft draws into exports (contact-sheet captions, watermarks, slideshow titles) is composed before it is
+  laid out. File names from macOS often store a Korean syllable as its separate jamo, or an accented letter as the
+  letter and its mark; they used to come out as loose pieces and now draw like the composed name (issue #3480).
+
 ## 2026-10-30
 
 ### The Flatpak may talk to the accessibility bus

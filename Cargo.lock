@@ -3692,6 +3692,7 @@ dependencies = [
  "chrono",
  "craft-docpath",
  "harfrust 0.13.3",
+ "icu_normalizer",
  "jxl-oxide",
  "libc",
  "lightcraft-catalog",

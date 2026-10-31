@@ -36,6 +36,8 @@ rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# NFC for drawn text (export watermarks, captions); already in the graph through craft-i18n
+icu_normalizer = { version = "2.3", default-features = false, features = ["compiled_data"] }
 log = { workspace = true }
 ab_glyph = { workspace = true }
 # Apply the font’s vertical substitutions and origins to Japanese watermarks.
