@@ -1939,6 +1939,22 @@ fn show_in_folders_makes_the_photo_right_clicked_the_active_one() {
     assert_eq!(sel, vec![a, b], "the selected photos of this folder stay selected");
 }
 
+/// A photo the filter bar leaves out of its folder isn't made active without a cell: Show in
+/// Folders says so and keeps the filter.
+#[test]
+fn show_in_folders_says_when_the_filter_hides_the_photo() {
+    let mut h = folders_app(&["/pics/trip/a.jpg", "/pics/trip/b.jpg"]);
+    let (a, b) = (id_at(&h, "/pics/trip/a.jpg"), id_at(&h, "/pics/trip/b.jpg"));
+    h.app.run("library.select", json!({"ids": [a.0], "active": a.0})).unwrap();
+    h.app.run("photo.rate", json!({"rating": 3, "ids": [a.0]})).unwrap();
+    h.app.run("library.filter", json!({"rating": 3})).unwrap();
+    h.step();
+    let e = h.app.run("app.showInFolders", json!({"id": b.0})).unwrap_err();
+    assert!(e.contains("filter"), "{e}");
+    assert_ne!(h.app.session.active(), Some(b), "no active photo without a cell");
+    assert_eq!(h.app.session.filter.rating, 3, "the filter stays");
+}
+
 /// A photo under the top of a collapsed stack has no cell until the stack opens: Show in Folders
 /// opens it, and the photo is shown and active (#3457).
 #[test]

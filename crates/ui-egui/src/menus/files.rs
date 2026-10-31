@@ -111,8 +111,13 @@ pub(super) fn show_in_folders(app: &mut LightcraftApp, ctx: &egui::Context, id: 
         if hidden {
             app.run("stack.toggle", json!({"ids": [photo.0], "collapsed": false}))?;
         }
+        let shown: std::collections::HashSet<_> = app.session.visible_cloned().into_iter().collect();
+        // the folder is shown, but the filter bar's other rules leave the photo out: it isn't made
+        // an active photo without a cell, and the filter is the person's to change
+        if !shown.contains(&photo) {
+            return Err("the filter hides this photo in its folder".into());
+        }
         // the photos of the selection this folder shows stay selected, with this one active
-        let shown = app.session.visible_cloned();
         let mut ids: Vec<u64> = selected.iter().filter(|p| **p != photo && shown.contains(p)).map(|p| p.0).collect();
         ids.push(photo.0);
         app.run("library.select", json!({"ids": ids, "active": photo.0}))?;
