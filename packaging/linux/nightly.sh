@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# App-owned GUI-only nightly tar: no FUSE/AppImage, CLI, association or install hooks.
+set -euo pipefail
+# The launcher lives beside this script. The sourced helpers define ROOT, not HERE, and an inherited
+# HERE would install some other script as the launcher.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ARCH=
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --arch) [[ $# -ge 2 ]] || { echo 'missing --arch value' >&2; exit 2; }; ARCH="$2"; shift 2 ;;
+    -h|--help) echo 'Usage: nightly.sh --arch x86_64'; exit 0 ;;
+    *) echo "unsupported nightly argument: $1" >&2; exit 2 ;;
+  esac
+done
+[[ "$ARCH" == x86_64 && "$(uname -s)" == Linux ]] || { echo 'only native Linux x86_64 nightly packaging is supported' >&2; exit 2; }
+# shellcheck source=../nightly-common.sh
+. "$(dirname "${BASH_SOURCE[0]}")/../nightly-common.sh"
+nightly_init linux "$ARCH" x86_64-unknown-linux-gnu
+OUTPUT="$DIST/lightcraft-$VERSION-linux-x86_64-nightly.tar.gz"
+[[ ! -e "$OUTPUT" && ! -L "$OUTPUT" ]] || nightly_die 'refusing to replace an existing nightly archive'
+nightly_build_gui
+STAGE="$NIGHTLY_WORK/stage"
+mkdir -p "$STAGE"
+# The GUI is `lightcraft-bin`; `lightcraft` is the launcher, so an unpacked tar starts in the
+# Nightly profile instead of the stable settings folder.
+install -m755 "$NIGHTLY_GUI" "$STAGE/lightcraft-bin"
+# Strip DWARF debug info from ELF binaries so release builds with line-tables-only stay well under
+# nightly-archive.py's 512 MiB per-member bound (while leaving non-ELF test stubs untouched).
+if command -v strip >/dev/null 2>&1 && cmp -s <(printf '\177ELF') <(head -c 4 "$STAGE/lightcraft-bin"); then
+  strip --strip-debug "$STAGE/lightcraft-bin"
+fi
+install -m755 "$HERE/nightly-tar-launch.sh" "$STAGE/lightcraft"
+install -m644 "$ROOT/assets/app-icon/lightcraft-nightly.png" "$STAGE/lightcraft-nightly.png"
+nightly_copy_notices "$STAGE"
+# The private mktemp cwd is the helper authority root, not a CLI path parent.
+(cd "$NIGHTLY_WORK" && python3 "$ROOT/packaging/nightly-archive.py" linux stage archive.tar.gz)
+nightly_publish_archive "$NIGHTLY_WORK/archive.tar.gz" "$OUTPUT"
